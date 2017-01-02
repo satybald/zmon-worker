@@ -4,14 +4,35 @@
 import boto3
 import json
 import logging
+
+import functools
 import requests
 import cStringIO
 
 from botocore.exceptions import ClientError
 
 from zmon_worker_monitor.adapters.ifunctionfactory_plugin import IFunctionFactoryPlugin, propartial
+from zmon_worker_monitor.zmon_worker.errors import S3BotoClientError
 
 logging.getLogger('botocore').setLevel(logging.WARN)
+logger = logging.getLogger('zmon-worker.s3-function')
+
+
+def logged(func):
+    """
+    Logging a functional call in case of errors
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ClientError, exp:
+            logger.exception('S3 boto client error: %s', exp)
+            raise S3BotoClientError(exp.message)
+        except Exception as exp:
+            logger.error(exp, exc_info=True)
+            raise
+    return wrapper
 
 
 class S3BucketWrapper(IFunctionFactoryPlugin):
@@ -39,8 +60,13 @@ class S3Wrapper(object):
     def __init__(self, region=None):
         if not region:
             region = get_region()
+        self._try_connect(region)
+
+    @logged
+    def _try_connect(self, region):
         self.__client = boto3.client('s3', region_name=region)
 
+    @logged
     def get_object_metadata(self, bucket_name, key):
         """
         Get metadata on the object in the given bucket and accessed with the given key.
@@ -50,12 +76,10 @@ class S3Wrapper(object):
         :param key: the key that identifies the S3 Object within the S3 Bucket
         :return: an S3ObjectMetadata object
         """
-        try:
-            response = self.__client.head_object(Bucket=bucket_name, Key=key)
-            return S3ObjectMetadata(response)
-        except ClientError:
-            return S3ObjectMetadata({})
+        response = self.__client.head_object(Bucket=bucket_name, Key=key)
+        return S3ObjectMetadata(response)
 
+    @logged
     def get_object(self, bucket_name, key):
         """
         Get the object in the given bucket and accessed with the given key.
@@ -69,8 +93,6 @@ class S3Wrapper(object):
             self.__client.download_fileobj(bucket_name, key, data)
             result = data.getvalue()
             return S3Object(result)
-        except ClientError:
-            return S3Object(None)
         finally:
             data.close()
 

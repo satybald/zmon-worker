@@ -1,8 +1,11 @@
+import pytest
 from botocore.exceptions import ClientError
 
 from zmon_worker_monitor.builtins.plugins.s3 import S3Wrapper
 
 from mock import MagicMock, DEFAULT, ANY
+
+from zmon_worker_monitor.zmon_worker.errors import S3BotoClientError
 
 
 def test_metadata_on_existing_object(monkeypatch):
@@ -38,12 +41,9 @@ def test_metadata_on_non_existent_object(monkeypatch):
     monkeypatch.setattr('boto3.client', lambda x, region_name: client)
     s3_wrapper = S3Wrapper()
 
-    meta_data = s3_wrapper.get_object_metadata('bucket', 'key')
-
-    assert meta_data is not None
-    assert meta_data.exists() is False
-    assert meta_data.size() is -1
-
+    with pytest.raises(S3BotoClientError):
+        s3_wrapper.get_object_metadata('bucket', 'key')
+        
 
 def test_object_should_not_be_found_and_text_not_returned(monkeypatch):
     client = MagicMock()
@@ -57,13 +57,9 @@ def test_object_should_not_be_found_and_text_not_returned(monkeypatch):
     monkeypatch.setattr('boto3.client', lambda x, region_name: client)
     s3_wrapper = S3Wrapper()
 
-    s3_object = s3_wrapper.get_object('bucket', 'key')
-    raw_object = s3_object.text()
-
-    client.download_fileobj.assert_called_with('bucket', 'key', ANY)
-    assert raw_object is None
-    assert s3_object.exists() is False
-    assert s3_object.size() is -1
+    with pytest.raises(S3BotoClientError):
+        s3_wrapper.get_object('bucket', 'key')
+        client.download_fileobj.assert_called_with('bucket', 'key', ANY)
 
 
 def test_object_should_be_found_and_text_returned(monkeypatch):

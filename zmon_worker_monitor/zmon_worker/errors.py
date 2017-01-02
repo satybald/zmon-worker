@@ -64,3 +64,10 @@ class ResultSizeError(CheckError):
         message = 'Result size error: {}'.format(message)
 
         super(ResultSizeError, self).__init__(message)
+
+
+class S3BotoClientError(CheckError):
+    def __init__(self, message):
+        message = 'Boto Client Error: {}'.format(message)
+
+        super(S3BotoClientError, self).__init__(message)
